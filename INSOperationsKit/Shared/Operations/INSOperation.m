@@ -20,7 +20,7 @@
 @property (nonatomic, weak) INSOperationQueue *enqueuedOperationQueue;
 
 @property (nonatomic, strong) NSArray <NSObject <INSOperationConditionProtocol> *> *conditions;
-@property (nonatomic, strong) NSArray <NSObject <INSOperationObserverProtocol> *> *observers;
+@property (nonatomic, strong) NSMutableArray <NSObject <INSOperationObserverProtocol> *> *observers;
 @property (nonatomic, strong) NSArray <NSError *> *internalErrors;
 
 @property (nonatomic, strong) NSHashTable <INSOperation <INSChainableOperationProtocol> *> *chainedOperations;
@@ -195,16 +195,22 @@
 
 #pragma mark - Observers
 
-- (NSArray *)observers {
+- (NSMutableArray *)observers {
     if (!_observers) {
-        _observers = @[];
+        _observers = [NSMutableArray new];
     }
     return _observers;
 }
 
 - (void)addObserver:(NSObject<INSOperationObserverProtocol> *)observer {
     NSAssert(self.state < INSOperationStateExecuting, @"Cannot modify observers after execution has begun.");
-    self.observers = [self.observers arrayByAddingObject:observer];
+    [self.observers addObject:observer];
+}
+
+- (void)removeObserver:(NSObject<INSOperationObserverProtocol> *)observer {
+    NSAssert(self.state < INSOperationStateFinished, @"Cannot remove observers before operation is finished.");
+    if ([self.observers containsObject:observer])
+        [self.observers removeObject:observer];
 }
 #pragma mark - Conditions
 
@@ -363,7 +369,7 @@
         _internalErrors = [self.internalErrors arrayByAddingObjectsFromArray:errors];
         [self finishedWithErrors:self.internalErrors];
 
-        for (NSObject<INSOperationObserverProtocol> *observer in self.observers) {
+        for (NSObject<INSOperationObserverProtocol> *observer in [self.observers reverseObjectEnumerator]) {
             if ([observer respondsToSelector:@selector(operationDidFinish:errors:)]) {
                 [observer operationDidFinish:self errors:self.internalErrors];
             }

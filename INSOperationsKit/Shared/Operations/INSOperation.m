@@ -55,9 +55,11 @@
     return YES;
 }
 
-- (NSHashTable <INSOperation <INSChainableOperationProtocol> *> *)chainedOperations {
-    if (!_chainedOperations) {
-        _chainedOperations = [NSHashTable hashTableWithOptions:NSPointerFunctionsWeakMemory];
+- (NSHashTable<INSOperation<INSChainableOperationProtocol> *> *)chainedOperations {
+    @synchronized (self) {
+        if (!_chainedOperations) {
+            _chainedOperations = [NSHashTable hashTableWithOptions:NSPointerFunctionsWeakMemory];
+        }
     }
     return _chainedOperations;
 }
@@ -232,12 +234,13 @@
 #pragma mark - Execution and Cancellation
 
 - (void)start {
-    NSAssert(self.state == INSOperationStateReady, @"This operation must be performed on an operation queue.");
-    
-    if (self.isCancelled) {
+    if (self.isCancelled || self.state > INSOperationStateReady) {
         [self finish];
         return;
     }
+
+    NSAssert(self.state == INSOperationStateReady, @"This operation must be performed on an operation queue.");
+
     self.state = INSOperationStateExecuting;
 
     for (NSObject<INSOperationObserverProtocol> *observer in self.observers) {
@@ -247,6 +250,12 @@
     }
 
     [self execute];
+    
+    for (NSObject<INSOperationObserverProtocol> *observer in self.observers) {
+        if ([observer respondsToSelector:@selector(operationDidStartExecuting:)]) {
+            [observer operationDidStartExecuting:self];
+        }
+    }
 }
 
 /**
